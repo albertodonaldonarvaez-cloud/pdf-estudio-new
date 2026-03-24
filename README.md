@@ -7,6 +7,29 @@ Un sistema completo y moderno para editar, crear y convertir documentos PDF con 
 ![Tailwind CSS](https://img.shields.io/badge/Tailwind%20CSS-4.0-38bdf8)
 ![License](https://img.shields.io/badge/License-MIT-green)
 
+## 📸 Capturas de Pantalla
+
+### Dashboard Principal
+![Dashboard](./screenshots/dashboard.png)
+
+### Pantalla de Login
+![Login](./screenshots/login.png)
+
+### Herramientas
+
+| OCR - Extracción de Texto | Editor de Documentos |
+|:-------------------------:|:--------------------:|
+| ![OCR Tool](./screenshots/ocr-tool.png) | ![Document Editor](./screenshots/document-editor.png) |
+
+| Organizador de PDFs | Panel de Administración |
+|:-------------------:|:-----------------------:|
+| ![PDF Organizer](./screenshots/pdf-organizer.png) | ![Admin Panel](./screenshots/admin-panel.png) |
+
+### Vista Móvil
+![Mobile View](./screenshots/mobile-view.png)
+
+---
+
 ## 🚀 Características Principales
 
 ### 📝 Editor de Documentos (Estilo Word)
