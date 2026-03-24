@@ -274,46 +274,63 @@ sudo certbot --nginx -d tudominio.com -d www.tudominio.com
 
 ---
 
-### 🐳 Docker (Universal)
+### 🐳 Docker (Universal - Recomendado)
+
+La forma más fácil de desplegar PDF Studio en cualquier servidor.
+
+#### Instalación Rápida con Docker
+
+```bash
+# 1. Clonar repositorio
+git clone https://github.com/albertodonaldonarvaez-cloud/pdf-estudio-new.git
+cd pdf-estudio-new
+
+# 2. Construir y ejecutar con Docker Compose
+docker compose up -d --build
+
+# 3. Verificar que está corriendo
+docker compose logs -f
+```
+
+¡Listo! La aplicación estará disponible en `http://localhost:3000`
+
+#### Comandos Docker Útiles
+
+```bash
+# Ver logs en tiempo real
+docker compose logs -f
+
+# Detener la aplicación
+docker compose down
+
+# Reiniciar la aplicación
+docker compose restart
+
+# Reconstruir después de actualizar
+git pull origin main
+docker compose up -d --build
+
+# Ver estado de los contenedores
+docker compose ps
+
+# Entrar al contenedor (para debugging)
+docker compose exec pdf-studio sh
+```
 
 #### Dockerfile incluido
 
-```dockerfile
-# Crear Dockerfile en la raíz del proyecto
-FROM oven/bun:1 as base
-WORKDIR /app
+El proyecto incluye un `Dockerfile` optimizado multi-stage que:
+- Usa Bun como runtime ultrarrápido
+- Inicializa la base de datos automáticamente
+- Ejecuta el seed para crear usuarios iniciales
+- Optimiza el tamaño de la imagen
 
-# Instalar dependencias
-FROM base AS install
-COPY package.json bun.lockb ./
-RUN bun install --frozen-lockfile
+#### Con Nginx Proxy (Producción)
 
-# Copiar código fuente
-FROM base AS build
-COPY --from=install /app/node_modules ./node_modules
-COPY . .
-
-# Generar cliente Prisma y compilar
-RUN bun run db:generate
-RUN bun run build
-
-# Imagen final
-FROM base AS release
-COPY --from=build /app/.next/standalone ./
-COPY --from=build /app/.next/static ./.next/static
-COPY --from=build /app/public ./public
-COPY --from=build /app/prisma ./prisma
-
-ENV NODE_ENV=production
-ENV PORT=3000
-
-EXPOSE 3000
-CMD ["bun", "run", "start"]
-```
-
-#### docker-compose.yml
+Para usar con un dominio y SSL:
 
 ```yaml
+# docker-compose.prod.yml
 version: '3.8'
 
 services:
@@ -321,35 +338,36 @@ services:
     build: .
     container_name: pdf-studio
     restart: unless-stopped
-    ports:
-      - "3000:3000"
+    expose:
+      - "3000"
     volumes:
-      - ./data:/app/data
-      - ./prisma:/app/prisma
+      - pdf-studio-db:/app/db
     environment:
       - NODE_ENV=production
-      - PORT=3000
-    command: >
-      sh -c "bun run db:push && bun run start"
-```
+      - DATABASE_URL=file:./db/custom.db
 
-#### Comandos Docker
+  nginx:
+    image: nginx:alpine
+    container_name: pdf-studio-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./certbot/conf:/etc/letsencrypt:ro
+      - ./certbot/www:/var/www/certbot:ro
+    depends_on:
+      - pdf-studio
 
-```bash
-# Construir imagen
-docker build -t pdf-studio .
+  certbot:
+    image: certbot/certbot
+    volumes:
+      - ./certbot/conf:/etc/letsencrypt
+      - ./certbot/www:/var/www/certbot
 
-# Ejecutar con docker-compose
-docker-compose up -d
-
-# Ver logs
-docker-compose logs -f
-
-# Detener
-docker-compose down
-
-# Reconstruir después de cambios
-docker-compose up -d --build
+volumes:
+  pdf-studio-db:
 ```
 
 ---
