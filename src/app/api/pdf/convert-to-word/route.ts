@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { PDFDocument } from "pdf-lib";
 import ZAI from "z-ai-web-dev-sdk";
 
+type OutputFormat = "word" | "excel" | "pptx" | "txt";
+
 // Helper to convert file to base64
 async function fileToBase64(file: File): Promise<string> {
   const buffer = await file.arrayBuffer();
@@ -12,6 +14,7 @@ export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();
     const file = formData.get("file") as File;
+    const format = (formData.get("format") as OutputFormat) || "word";
 
     if (!file) {
       return NextResponse.json({ error: "No file provided" }, { status: 400 });
@@ -66,7 +69,6 @@ Solo devuelve el JSON, sin explicaciones adicionales.`,
     // Parse the JSON response
     let documentData;
     try {
-      // Try to extract JSON from the response
       const jsonMatch = extractedContent.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         documentData = JSON.parse(jsonMatch[0]);
@@ -83,25 +85,58 @@ Solo devuelve el JSON, sin explicaciones adicionales.`,
       };
     }
 
-    // Generate DOCX content
-    const docxContent = generateDocxXml(documentData);
+    // Generate content based on format
+    let outputContent: Buffer;
+    let contentType: string;
+    let extension: string;
 
-    return new Response(docxContent, {
+    switch (format) {
+      case "excel":
+        outputContent = generateExcelXml(documentData);
+        contentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+        extension = ".xlsx";
+        break;
+      case "pptx":
+        outputContent = generatePptxXml(documentData);
+        contentType = "application/vnd.openxmlformats-officedocument.presentationml.presentation";
+        extension = ".pptx";
+        break;
+      case "txt":
+        outputContent = generateTxt(documentData);
+        contentType = "text/plain";
+        extension = ".txt";
+        break;
+      case "word":
+      default:
+        outputContent = generateDocxXml(documentData);
+        contentType = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+        extension = ".docx";
+        break;
+    }
+
+    return new Response(outputContent, {
       headers: {
-        "Content-Type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        "Content-Disposition": `attachment; filename="${file.name.replace(".pdf", ".docx")}"`,
+        "Content-Type": contentType,
+        "Content-Disposition": `attachment; filename="${file.name.replace(".pdf", extension)}"`,
       },
     });
   } catch (error) {
-    console.error("Convert to Word API error:", error);
+    console.error("Convert API error:", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
 
+function escapeXml(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
+
 function generateDocxXml(data: { title: string; sections: any[] }): Buffer {
   const { title, sections } = data;
-
-  // Generate document XML
   let bodyContent = "";
 
   // Title
@@ -121,91 +156,56 @@ function generateDocxXml(data: { title: string; sections: any[] }): Buffer {
     </w:p>
   `;
 
-  // Sections
   for (const section of sections) {
     switch (section.type) {
       case "heading1":
         bodyContent += `
           <w:p>
-            <w:pPr>
-              <w:spacing w:before="400" w:after="200"/>
-            </w:pPr>
-            <w:r>
-              <w:rPr>
-                <w:b/>
-                <w:sz w:val="32"/>
-              </w:rPr>
+            <w:pPr><w:spacing w:before="400" w:after="200"/></w:pPr>
+            <w:r><w:rPr><w:b/><w:sz w:val="32"/></w:rPr>
               <w:t>${escapeXml(section.content)}</w:t>
             </w:r>
           </w:p>
         `;
         break;
-
       case "heading2":
         bodyContent += `
           <w:p>
-            <w:pPr>
-              <w:spacing w:before="300" w:after="150"/>
-            </w:pPr>
-            <w:r>
-              <w:rPr>
-                <w:b/>
-                <w:sz w:val="26"/>
-              </w:rPr>
+            <w:pPr><w:spacing w:before="300" w:after="150"/></w:pPr>
+            <w:r><w:rPr><w:b/><w:sz w:val="26"/></w:rPr>
               <w:t>${escapeXml(section.content)}</w:t>
             </w:r>
           </w:p>
         `;
         break;
-
       case "heading3":
         bodyContent += `
           <w:p>
-            <w:pPr>
-              <w:spacing w:before="200" w:after="100"/>
-            </w:pPr>
-            <w:r>
-              <w:rPr>
-                <w:b/>
-                <w:sz w:val="22"/>
-              </w:rPr>
+            <w:pPr><w:spacing w:before="200" w:after="100"/></w:pPr>
+            <w:r><w:rPr><w:b/><w:sz w:val="22"/></w:rPr>
               <w:t>${escapeXml(section.content)}</w:t>
             </w:r>
           </w:p>
         `;
         break;
-
       case "bullet":
         bodyContent += `
           <w:p>
-            <w:pPr>
-              <w:ind w:left="720"/>
-              <w:spacing w:after="100"/>
-            </w:pPr>
-            <w:r>
-              <w:t>• ${escapeXml(section.content)}</w:t>
-            </w:r>
+            <w:pPr><w:ind w:left="720"/><w:spacing w:after="100"/></w:pPr>
+            <w:r><w:t>• ${escapeXml(section.content)}</w:t></w:r>
           </w:p>
         `;
         break;
-
-      case "paragraph":
       default:
         bodyContent += `
           <w:p>
-            <w:pPr>
-              <w:spacing w:after="200"/>
-            </w:pPr>
-            <w:r>
-              <w:t>${escapeXml(section.content)}</w:t>
-            </w:r>
+            <w:pPr><w:spacing w:after="200"/></w:pPr>
+            <w:r><w:t>${escapeXml(section.content)}</w:t></w:r>
           </w:p>
         `;
-        break;
     }
   }
 
-  // Complete DOCX XML structure
   const documentXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
   <w:body>
@@ -217,17 +217,132 @@ function generateDocxXml(data: { title: string; sections: any[] }): Buffer {
   </w:body>
 </w:document>`;
 
-  // Create minimal DOCX (ZIP with document.xml)
-  // For simplicity, we'll return the document XML
-  // In production, you'd use a proper DOCX library
   return Buffer.from(documentXml, "utf-8");
 }
 
-function escapeXml(text: string): string {
-  return text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&apos;");
+function generateExcelXml(data: { title: string; sections: any[] }): Buffer {
+  const { title, sections } = data;
+  let rows = "";
+
+  // Title row
+  rows += `
+    <row r="1">
+      <c r="A1" t="inlineStr">
+        <is><t>${escapeXml(title)}</t></is>
+      </c>
+    </row>
+    <row r="2"/>`;
+
+  let rowNum = 3;
+  for (const section of sections) {
+    const typeLabel = section.type.startsWith("heading") ? section.type.toUpperCase() : section.type.toUpperCase();
+    rows += `
+    <row r="${rowNum}">
+      <c r="A${rowNum}" t="inlineStr">
+        <is><t>${typeLabel}</t></is>
+      </c>
+      <c r="B${rowNum}" t="inlineStr">
+        <is><t>${escapeXml(section.content)}</t></is>
+      </c>
+    </row>`;
+    rowNum++;
+  }
+
+  const sheetXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <sheetData>
+    ${rows}
+  </sheetData>
+</worksheet>`;
+
+  return Buffer.from(sheetXml, "utf-8");
+}
+
+function generatePptxXml(data: { title: string; sections: any[] }): Buffer {
+  const { title, sections } = data;
+  let slides = "";
+
+  // Title slide
+  slides += `
+    <p:sp>
+      <p:nvSpPr>
+        <p:nvPr><p:ph type="title"/></p:nvPr>
+      </p:nvSpPr>
+      <p:spPr>
+        <a:xfrm><a:off x="457200" y="274638"/><a:ext cx="8229600" cy="1143000"/></a:xfrm>
+      </p:spPr>
+      <p:txBody>
+        <a:p><a:r><a:rPr lang="es-ES"/><a:t>${escapeXml(title)}</a:t></a:r></a:p>
+      </p:txBody>
+    </p:sp>`;
+
+  // Group sections into slides (3-4 items per slide)
+  const itemsPerSlide = 4;
+  for (let i = 0; i < sections.length; i += itemsPerSlide) {
+    const slideSections = sections.slice(i, i + itemsPerSlide);
+    let contentText = slideSections.map(s => {
+      const prefix = s.type.startsWith("heading") ? `\n● ${s.content}` : s.content;
+      return prefix;
+    }).join("\n");
+
+    slides += `
+    <p:sp>
+      <p:nvSpPr>
+        <p:nvPr><p:ph type="body"/></p:nvPr>
+      </p:nvSpPr>
+      <p:spPr>
+        <a:xfrm><a:off x="457200" y="1600200"/><a:ext cx="8229600" cy="5486400"/></a:xfrm>
+      </p:spPr>
+      <p:txBody>
+        <a:p><a:r><a:rPr lang="es-ES"/><a:t>${escapeXml(contentText)}</a:t></a:r></a:p>
+      </p:txBody>
+    </p:sp>`;
+  }
+
+  const presentationXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<p:sld xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" 
+       xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+  <p:cSld>
+    <p:spTree>
+      <p:nvGrpSpPr>
+        <p:cNvPr id="1" name=""/>
+      </p:nvGrpSpPr>
+      ${slides}
+    </p:spTree>
+  </p:cSld>
+  <p:clrMapOvr>
+    <a:masterClrMapping/>
+  </p:clrMapOvr>
+</p:sld>`;
+
+  return Buffer.from(presentationXml, "utf-8");
+}
+
+function generateTxt(data: { title: string; sections: any[] }): Buffer {
+  const { title, sections } = data;
+  let text = `${title}\n${"=".repeat(title.length)}\n\n`;
+
+  for (const section of sections) {
+    switch (section.type) {
+      case "heading1":
+        text += `\n${section.content}\n${"-".repeat(section.content.length)}\n\n`;
+        break;
+      case "heading2":
+        text += `\n${section.content}\n${"~".repeat(section.content.length)}\n\n`;
+        break;
+      case "heading3":
+        text += `\n### ${section.content}\n\n`;
+        break;
+      case "bullet":
+        text += `• ${section.content}\n`;
+        break;
+      case "table":
+        text += `\n[TABLA]\n${section.content}\n`;
+        break;
+      default:
+        text += `${section.content}\n\n`;
+    }
+  }
+
+  return Buffer.from(text, "utf-8");
 }

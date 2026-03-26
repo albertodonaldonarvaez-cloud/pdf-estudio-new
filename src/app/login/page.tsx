@@ -134,24 +134,6 @@ export default function LoginPage() {
                 )}
               </Button>
             </form>
-
-            <div className="mt-6 pt-4 border-t border-slate-200 dark:border-slate-700">
-              <p className="text-xs text-center text-slate-500 dark:text-slate-400 mb-3">
-                Credenciales de prueba:
-              </p>
-              <div className="space-y-2">
-                <div className="p-3 rounded-lg bg-slate-100 dark:bg-slate-800 text-xs font-mono">
-                  <p className="text-slate-600 dark:text-slate-300">
-                    <span className="text-violet-600 dark:text-violet-400">Admin:</span> admin@pdfstudio.com / admin123
-                  </p>
-                </div>
-                <div className="p-3 rounded-lg bg-slate-100 dark:bg-slate-800 text-xs font-mono">
-                  <p className="text-slate-600 dark:text-slate-300">
-                    <span className="text-violet-600 dark:text-violet-400">Demo:</span> demo@pdfstudio.com / demo123
-                  </p>
-                </div>
-              </div>
-            </div>
           </CardContent>
         </Card>
       </motion.div>
