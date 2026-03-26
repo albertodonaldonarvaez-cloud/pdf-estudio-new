@@ -1,72 +1,92 @@
 # ================================
-# Stage 1: Builder
+# Stage 1: Base with dependencies
 # ================================
-FROM oven/bun:1 AS builder
+FROM oven/bun:1 AS deps
 WORKDIR /app
 
-# Copy all files
-COPY . .
+# Copy package files
+COPY package.json bun.lock* ./
+
+# Copy prisma schema for client generation
+COPY prisma ./prisma/
 
 # Install dependencies
 RUN bun install
 
-# Create necessary directories
-RUN mkdir -p ./db
-RUN mkdir -p ./.config
-
 # Generate Prisma client
 RUN bunx prisma generate
+
+# ================================
+# Stage 2: Build
+# ================================
+FROM deps AS builder
+WORKDIR /app
+
+# Copy all source code
+COPY . .
+
+# Create database directory
+RUN mkdir -p ./db
+
+# Set database URL for build
+ENV DATABASE_URL="file:./db/custom.db"
+
+# Create .env file for Prisma
+RUN echo 'DATABASE_URL="file:./db/custom.db"' > .env
 
 # Initialize database
 RUN bunx prisma db push --skip-generate
 
-# Run seed to create users
+# Run seed script  
 RUN bun run prisma/seed.ts
 
-# Build the application
+# Build Next.js
 RUN bun run build
 
 # ================================
-# Stage 2: Production Runner
+# Stage 3: Production
 # ================================
 FROM oven/bun:1-slim AS runner
 WORKDIR /app
 
-# Set production environment
+# Environment
 ENV NODE_ENV=production
 ENV PORT=3000
-ENV DATABASE_URL=file:./db/custom.db
+ENV DATABASE_URL="file:./db/custom.db"
 
-# Create non-root user for security
-RUN groupadd --system --gid 1001 nodejs
-RUN useradd --system --uid 1001 --gid nodejs nextjs
+# Create user
+RUN groupadd --system --gid 1001 nodejs && \
+    useradd --system --uid 1001 --gid nodejs nextjs
 
-# Copy built application
+# Install curl for healthcheck
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends curl && \
+    rm -rf /var/lib/apt/lists/*
+
+# Copy standalone server
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/public ./public
 
-# Copy database
+# Copy database with data
 COPY --from=builder /app/db ./db
 
-# Copy Prisma files for runtime
+# Copy Prisma runtime files
 COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
-COPY --from=builder /app/node_modules/prisma ./node_modules/prisma
-COPY --from=builder /app/.config ./.config
 
-# Copy .env
-COPY --from=builder /app/.env ./
+# Create .env file
+RUN echo 'DATABASE_URL="file:./db/custom.db"' > .env
 
-# Set proper permissions
+# Fix permissions
 RUN chown -R nextjs:nodejs /app
 
-# Switch to non-root user
 USER nextjs
 
-# Expose port
 EXPOSE 3000
 
-# Start the server
+HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
+    CMD curl -f http://localhost:3000 || exit 1
+
 CMD ["bun", "server.js"]
