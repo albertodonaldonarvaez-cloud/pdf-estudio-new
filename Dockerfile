@@ -7,8 +7,9 @@ WORKDIR /app
 # Copy package files
 COPY package.json bun.lock* ./
 
-# Copy prisma schema for client generation
+# Copy prisma schema and config for client generation
 COPY prisma ./prisma/
+COPY prisma.config.ts ./
 
 # Install dependencies
 RUN bun install
@@ -73,6 +74,7 @@ COPY --from=builder /app/db ./db
 
 # Copy Prisma runtime files
 COPY --from=builder /app/prisma ./prisma
+COPY --from=builder /app/prisma.config.ts ./
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
 
