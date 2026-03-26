@@ -53,10 +53,23 @@ docker-compose*.yml
 dev.log
 server.log
 
-# Database (we don't want to copy local db)
+# Database files (will be created during build)
 db/*.db
 db/*.db-journal
 
 # Documentation
 README.md
 LICENSE
+
+# Config directory (not needed in build)
+.config
+
+# Scripts and examples
+examples/
+.zscripts/
+worklog.md
+download/
+mini-services/
+
+# Screenshots (not needed in container)
+screenshots/

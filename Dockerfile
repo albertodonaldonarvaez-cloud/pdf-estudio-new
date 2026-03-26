@@ -1,42 +1,33 @@
 # ================================
-# Stage 1: Dependencies
+# Stage 1: Builder
 # ================================
-FROM oven/bun:1 AS deps
+FROM oven/bun:1 AS builder
 WORKDIR /app
 
-# Copy package files first for better caching
-COPY package.json bun.lockb* ./
-COPY prisma ./prisma/
+# Copy all files
+COPY . .
 
-# Install all dependencies (including devDependencies for build)
-RUN bun install --frozen-lockfile
+# Install dependencies
+RUN bun install
+
+# Create necessary directories
+RUN mkdir -p ./db
+RUN mkdir -p ./.config
 
 # Generate Prisma client
 RUN bunx prisma generate
 
-# ================================
-# Stage 2: Build
-# ================================
-FROM deps AS builder
-WORKDIR /app
-
-# Copy source code
-COPY . .
-
-# Create database directory and initialize
-RUN mkdir -p ./db
-
-# Initialize database with schema
+# Initialize database
 RUN bunx prisma db push --skip-generate
 
-# Run seed script to create initial users
+# Run seed to create users
 RUN bun run prisma/seed.ts
 
-# Build the Next.js application
+# Build the application
 RUN bun run build
 
 # ================================
-# Stage 3: Production Runner
+# Stage 2: Production Runner
 # ================================
 FROM oven/bun:1-slim AS runner
 WORKDIR /app
@@ -55,16 +46,17 @@ COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/public ./public
 
-# Copy database from builder
+# Copy database
 COPY --from=builder /app/db ./db
 
-# Copy Prisma schema and client for runtime operations
+# Copy Prisma files for runtime
 COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
 COPY --from=builder /app/node_modules/prisma ./node_modules/prisma
+COPY --from=builder /app/.config ./.config
 
-# Copy .env for runtime config
+# Copy .env
 COPY --from=builder /app/.env ./
 
 # Set proper permissions
