@@ -1,0 +1,28 @@
+version: '3.8'
+
+services:
+  pdf-studio:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: pdf-studio
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      # Persist database - this ensures data survives container restarts
+      - pdf-studio-db:/app/db
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - DATABASE_URL=file:./db/custom.db
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3000 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+volumes:
+  pdf-studio-db:
+    driver: local
